@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Сканер сети</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-icon">▣</span>
+        <span>Helper for SysAdmins</span>
+      </div>
+      <nav>
+        <a class="active" href="#" data-view="scanner">Сканер</a>
+        <a href="#" data-view="diagnostics">Диагностика</a>
+        <a href="#" data-view="subnet">Подсети</a>
+        <a href="#" data-view="system">Система</a>
+        <a href="#" data-view="handbook">Справочник</a>
+      </nav>
+      <div class="connection">
+        <span class="dot"></span>
+        <div>
+          <strong>Локально</strong>
+          <small>127.0.0.1</small>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">Сканирование сети</h1>
+          <p id="pageSubtitle">Инвентаризация активных IP-адресов в офисном LAN.</p>
+        </div>
+        <time id="clock"></time>
+      </header>
+
+      <section class="view active" id="scannerView">
+      <section class="panel controls">
+        <label>
+          Диапазон CIDR
+          <input id="cidr" placeholder="192.168.1.0/24" />
+        </label>
+        <label>
+          TCP-порты
+          <input id="ports" />
+        </label>
+        <label>
+          Таймаут, мс
+          <input id="timeout" type="number" min="100" max="5000" value="700" />
+        </label>
+        <label>
+          Потоки
+          <input id="concurrency" type="number" min="1" max="256" value="96" />
+        </label>
+        <button id="scanBtn" class="primary" type="button">▶ Сканировать</button>
+      </section>
+
+      <section class="status-grid">
+        <div class="panel progress-panel">
+          <div class="ring" id="ring"><span id="activeCount">0</span></div>
+          <div>
+            <h2 id="scanTitle">Готово к сканированию</h2>
+            <p id="scanMeta">Укажите диапазон и запустите проверку.</p>
+            <p id="scanError" class="error"></p>
+          </div>
+        </div>
+        <div class="metric panel">
+          <span>Проверено адресов</span>
+          <strong id="hostCount">0</strong>
+        </div>
+        <div class="metric panel">
+          <span>Открытых портов</span>
+          <strong id="openPortCount">0</strong>
+        </div>
+        <div class="metric panel">
+          <span>Длительность</span>
+          <strong id="duration">0 c</strong>
+        </div>
+      </section>
+
+      <section class="results">
+        <div class="results-head">
+          <h2>Результаты</h2>
+          <div class="actions">
+            <button id="refreshBtn" type="button">↻ Обновить</button>
+            <button id="csvBtn" type="button">CSV</button>
+            <button id="jsonBtn" type="button">JSON</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Статус</th>
+                <th>IP-адрес</th>
+                <th>Название устройства</th>
+                <th>Hostname</th>
+                <th>MAC-адрес</th>
+                <th>Открытые порты</th>
+                <th>Задержка</th>
+                <th>Последнее обнаружение</th>
+              </tr>
+            </thead>
+            <tbody id="devices">
+              <tr>
+                <td colspan="8" class="empty">Данных пока нет</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      </section>
+
+      <section class="view" id="diagnosticsView">
+        <section class="tool-grid">
+          <div class="panel tool-card">
+            <h2>Ping</h2>
+            <label>
+              Хост
+              <input id="pingHost" placeholder="192.168.1.1" />
+            </label>
+            <label>
+              Количество
+              <input id="pingCount" type="number" min="1" max="10" value="4" />
+            </label>
+            <button id="pingBtn" class="primary" type="button">Запустить</button>
+            <pre id="pingOutput" class="output"></pre>
+          </div>
+
+          <div class="panel tool-card">
+            <h2>Trace route</h2>
+            <label>
+              Хост
+              <input id="traceHost" placeholder="192.168.1.1" />
+            </label>
+            <button id="traceBtn" class="primary" type="button">Запустить</button>
+            <pre id="traceOutput" class="output"></pre>
+          </div>
+
+          <div class="panel tool-card">
+            <h2>DNS</h2>
+            <label>
+              Хост
+              <input id="dnsHost" placeholder="server.local" />
+            </label>
+            <button id="dnsBtn" class="primary" type="button">Проверить</button>
+            <pre id="dnsOutput" class="output"></pre>
+          </div>
+
+          <div class="panel tool-card">
+            <h2>TCP-порты</h2>
+            <label>
+              Хост
+              <input id="portHost" placeholder="192.168.1.10" />
+            </label>
+            <label>
+              Порты
+              <input id="portList" value="22, 80, 443, 3389, 8080" />
+            </label>
+            <button id="portBtn" class="primary" type="button">Проверить</button>
+            <pre id="portOutput" class="output"></pre>
+          </div>
+        </section>
+      </section>
+
+      <section class="view" id="subnetView">
+        <section class="panel controls subnet-controls">
+          <label>
+            CIDR
+            <input id="subnetCidr" placeholder="192.168.1.0/24" />
+          </label>
+          <button id="subnetBtn" class="primary" type="button">Рассчитать</button>
+        </section>
+        <section class="panel info-panel">
+          <pre id="subnetOutput" class="output large"></pre>
+        </section>
+      </section>
+
+      <section class="view" id="systemView">
+        <section class="results-head">
+          <h2>Локальная система</h2>
+          <div class="actions">
+            <button id="systemBtn" type="button">Обновить</button>
+            <button id="arpBtn" type="button">ARP</button>
+          </div>
+        </section>
+        <section class="panel info-panel">
+          <pre id="systemOutput" class="output large"></pre>
+        </section>
+      </section>
+
+      <section class="view" id="handbookView">
+        <section class="tool-grid">
+          <div class="panel command-card">
+            <h2>Windows сеть</h2>
+            <code>ipconfig /all</code>
+            <code>arp -a</code>
+            <code>route print</code>
+            <code>netstat -ano</code>
+            <code>nslookup host</code>
+          </div>
+          <div class="panel command-card">
+            <h2>Сервисы</h2>
+            <code>Get-Service</code>
+            <code>Get-Process</code>
+            <code>Get-EventLog -LogName System</code>
+            <code>Get-NetTCPConnection</code>
+          </div>
+          <div class="panel command-card">
+            <h2>Linux сеть</h2>
+            <code>ip addr</code>
+            <code>ip route</code>
+            <code>ss -tulpn</code>
+            <code>dig host</code>
+            <code>traceroute host</code>
+          </div>
+          <div class="panel command-card">
+            <h2>Быстрые порты</h2>
+            <code>22 SSH</code>
+            <code>80 HTTP</code>
+            <code>443 HTTPS</code>
+            <code>445 SMB</code>
+            <code>3389 RDP</code>
+            <code>9100 RAW Print</code>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
