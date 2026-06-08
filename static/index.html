@@ -171,19 +171,26 @@
             <option>Managed Inventory</option>
             <option>Last Scan</option>
           </select>
+          <span id="neighborSelectedCount" class="neighbor-selected-count">0 selected</span>
+          <div class="neighbor-actions">
+            <button id="neighborInspectBtn" type="button" disabled>Inspect</button>
+            <button id="neighborNameBtn" type="button" disabled>Set Identity</button>
+            <button id="neighborPingBtn" type="button" disabled>Ping</button>
+            <button id="neighborCopyBtn" type="button" disabled>Copy</button>
+          </div>
         </div>
         <div class="table-wrap">
           <table class="neighbors-table">
             <thead>
               <tr>
-                <th class="check-col"><input type="checkbox" aria-label="Выбрать все" disabled /></th>
-                <th>MAC Address</th>
-                <th>IP Address</th>
-                <th>Identity</th>
-                <th>Version</th>
-                <th>Board</th>
-                <th>Uptime</th>
-                <th>Board's Port</th>
+                <th class="check-col"><input id="neighborSelectAll" type="checkbox" aria-label="Выбрать все" /></th>
+                <th><button class="sort-header" type="button" data-sort="mac">MAC Address</button></th>
+                <th><button class="sort-header" type="button" data-sort="ip">IP Address</button></th>
+                <th><button class="sort-header" type="button" data-sort="identity">Identity</button></th>
+                <th><button class="sort-header" type="button" data-sort="version">Version</button></th>
+                <th><button class="sort-header" type="button" data-sort="board">Board</button></th>
+                <th><button class="sort-header" type="button" data-sort="uptime">Uptime</button></th>
+                <th><button class="sort-header" type="button" data-sort="port">Board's Port</button></th>
               </tr>
             </thead>
             <tbody id="devices">
@@ -193,6 +200,26 @@
             </tbody>
           </table>
         </div>
+        <section id="neighborInspector" class="neighbor-inspector" hidden>
+          <div>
+            <span class="inspector-label">Device inspector</span>
+            <h3 id="neighborInspectorTitle">-</h3>
+            <p id="neighborInspectorMeta">-</p>
+          </div>
+          <label>
+            Identity
+            <input id="neighborIdentityInput" placeholder="Например: MikroTik core router" />
+          </label>
+          <div class="inspector-fields">
+            <span><strong>MAC</strong><small id="neighborInspectorMac">-</small></span>
+            <span><strong>Ports</strong><small id="neighborInspectorPorts">-</small></span>
+            <span><strong>Seen</strong><small id="neighborInspectorSeen">-</small></span>
+          </div>
+          <div class="inspector-actions">
+            <button id="neighborSaveIdentityBtn" class="primary" type="button">Save Identity</button>
+            <button id="neighborCloseInspectorBtn" type="button">Close</button>
+          </div>
+        </section>
       </section>
       </section>
 

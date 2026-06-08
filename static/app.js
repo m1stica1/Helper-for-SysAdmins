@@ -4,6 +4,9 @@ const state = {
   history: [],
   profiles: [],
   scanning: false,
+  selectedNeighborIps: new Set(),
+  activeNeighborIp: null,
+  scanSort: { key: "ip", dir: "asc" },
 };
 
 const viewMeta = {
@@ -125,6 +128,33 @@ function formatNeighborPort(device) {
   return formatPorts(device.open_ports || []);
 }
 
+function ipSortValue(value) {
+  const parts = String(value || "").split(".").map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) return 0;
+  return parts.reduce((sum, part) => (sum * 256) + part, 0);
+}
+
+function deviceIdentity(device) {
+  return device.device_name || device.hostname || "";
+}
+
+function sortDevices(devices) {
+  const { key, dir } = state.scanSort;
+  const direction = dir === "desc" ? -1 : 1;
+  return [...devices].sort((left, right) => {
+    if (key === "ip") return (ipSortValue(left.ip) - ipSortValue(right.ip)) * direction;
+    const values = {
+      mac: [left.mac || "", right.mac || ""],
+      identity: [deviceIdentity(left), deviceIdentity(right)],
+      version: [left.version || "", right.version || ""],
+      board: [left.board || "", right.board || ""],
+      uptime: [left.uptime || "", right.uptime || ""],
+      port: [formatNeighborPort(left), formatNeighborPort(right)],
+    }[key] || [left.ip || "", right.ip || ""];
+    return values[0].localeCompare(values[1], "ru", { numeric: true, sensitivity: "base" }) * direction;
+  });
+}
+
 function getFilteredScanDevices() {
   const result = state.lastResult;
   if (!result) return [];
@@ -133,13 +163,17 @@ function getFilteredScanDevices() {
   const port = Number($("scanFilterPort").value);
   const mode = $("scanFilterMode").value;
 
-  return (result.devices || []).filter((device) => {
+  const filtered = (result.devices || []).filter((device) => {
     const haystack = [
       device.ip,
       device.device_name,
       device.hostname,
       device.mac,
       device.name_source,
+      device.version,
+      device.board,
+      device.board_port,
+      device.uptime,
       ...(device.open_ports || []),
     ].join(" ").toLowerCase();
     const textMatch = !text || haystack.includes(text);
@@ -151,6 +185,72 @@ function getFilteredScanDevices() {
       (mode === "unnamed" && !device.device_name);
     return textMatch && portMatch && modeMatch;
   });
+  return sortDevices(filtered);
+}
+
+function findDeviceByIp(ip) {
+  return (state.lastResult?.devices || []).find((device) => device.ip === ip);
+}
+
+function selectedNeighborDevices() {
+  return [...state.selectedNeighborIps]
+    .map((ip) => findDeviceByIp(ip))
+    .filter(Boolean);
+}
+
+function updateSortHeaders() {
+  document.querySelectorAll(".sort-header").forEach((button) => {
+    const active = button.dataset.sort === state.scanSort.key;
+    button.classList.toggle("sorted", active);
+    button.classList.toggle("desc", active && state.scanSort.dir === "desc");
+  });
+}
+
+function updateNeighborSelectionUi() {
+  const visibleDevices = getFilteredScanDevices();
+  const visibleIps = new Set(visibleDevices.map((device) => device.ip));
+  for (const ip of [...state.selectedNeighborIps]) {
+    if (!findDeviceByIp(ip)) state.selectedNeighborIps.delete(ip);
+  }
+
+  document.querySelectorAll("#devices tr[data-ip]").forEach((row) => {
+    const selected = state.selectedNeighborIps.has(row.dataset.ip);
+    row.classList.toggle("selected", selected);
+    row.classList.toggle("active-neighbor", row.dataset.ip === state.activeNeighborIp);
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    if (checkbox) checkbox.checked = selected;
+  });
+
+  const selectedVisibleCount = [...state.selectedNeighborIps].filter((ip) => visibleIps.has(ip)).length;
+  const selectAll = $("neighborSelectAll");
+  selectAll.disabled = visibleDevices.length === 0;
+  selectAll.checked = visibleDevices.length > 0 && selectedVisibleCount === visibleDevices.length;
+  selectAll.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleDevices.length;
+
+  const selectedCount = state.selectedNeighborIps.size;
+  $("neighborSelectedCount").textContent = `${selectedCount} selected`;
+  ["neighborInspectBtn", "neighborNameBtn", "neighborPingBtn", "neighborCopyBtn"].forEach((id) => {
+    $(id).disabled = selectedCount === 0;
+  });
+}
+
+function renderNeighborInspector(device) {
+  if (!device) {
+    $("neighborInspector").hidden = true;
+    state.activeNeighborIp = null;
+    updateNeighborSelectionUi();
+    return;
+  }
+
+  state.activeNeighborIp = device.ip;
+  $("neighborInspector").hidden = false;
+  $("neighborInspectorTitle").textContent = deviceIdentity(device) || device.ip;
+  $("neighborInspectorMeta").textContent = `${device.ip} · ${device.hostname || "hostname не найден"}`;
+  $("neighborIdentityInput").value = device.device_name || "";
+  $("neighborInspectorMac").textContent = device.mac || "-";
+  $("neighborInspectorPorts").textContent = formatPorts(device.open_ports || []);
+  $("neighborInspectorSeen").textContent = formatDate(device.last_seen);
+  updateNeighborSelectionUi();
 }
 
 function renderResult(result) {
@@ -169,10 +269,12 @@ function renderResult(result) {
   $("scanFilterCount").textContent = `${devices.length} из ${allDevices.length} устройств`;
   $("scanError").textContent = "";
   $("ring").style.background = `conic-gradient(var(--teal) ${Math.max(completion, 6) * 3.6}deg, var(--line) 0deg)`;
+  updateSortHeaders();
 
   const body = $("devices");
   if (!devices.length) {
     body.innerHTML = '<tr><td colspan="8" class="empty">Активные устройства не найдены</td></tr>';
+    updateNeighborSelectionUi();
     return;
   }
 
@@ -185,9 +287,11 @@ function renderResult(result) {
         netbios: "NetBIOS",
         dns: "DNS",
       }[device.name_source] || "нет имени";
+      const selectedClass = state.selectedNeighborIps.has(device.ip) ? " selected" : "";
+      const activeClass = device.ip === state.activeNeighborIp ? " active-neighbor" : "";
       return `
-        <tr>
-          <td class="neighbor-check-cell"><input type="checkbox" aria-label="Выбрать ${escapeHtml(device.ip)}" /></td>
+        <tr data-ip="${escapeHtml(device.ip)}" class="${selectedClass}${activeClass}">
+          <td class="neighbor-check-cell"><input type="checkbox" aria-label="Выбрать ${escapeHtml(device.ip)}" ${state.selectedNeighborIps.has(device.ip) ? "checked" : ""} /></td>
           <td>${escapeHtml(device.mac || "-")}</td>
           <td><strong>${escapeHtml(device.ip)}</strong></td>
           <td>
@@ -204,6 +308,7 @@ function renderResult(result) {
       `;
     })
     .join("");
+  updateNeighborSelectionUi();
 }
 
 function renderProfiles() {
@@ -315,6 +420,69 @@ async function saveDeviceName(button) {
   }
 }
 
+function firstSelectedNeighbor() {
+  const devices = selectedNeighborDevices();
+  return devices[0] || null;
+}
+
+function openSelectedNeighborInspector(focusIdentity = false) {
+  const device = firstSelectedNeighbor();
+  if (!device) return;
+  renderNeighborInspector(device);
+  if (focusIdentity) $("neighborIdentityInput").focus();
+}
+
+async function saveNeighborIdentity() {
+  const device = state.activeNeighborIp ? findDeviceByIp(state.activeNeighborIp) : firstSelectedNeighbor();
+  if (!device) return;
+
+  const button = $("neighborSaveIdentityBtn");
+  button.disabled = true;
+  try {
+    const name = $("neighborIdentityInput").value.trim();
+    const response = await fetch("/api/device-name", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ip: device.ip, mac: device.mac || "", name }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Не удалось сохранить Identity.");
+
+    device.device_name = name || null;
+    device.name_source = name ? "manual_ip" : null;
+    renderResult(state.lastResult);
+    renderNeighborInspector(device);
+  } catch (error) {
+    $("scanError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function pingSelectedNeighbor() {
+  const device = firstSelectedNeighbor();
+  if (!device) return;
+  $("pingHost").value = device.ip;
+  showView("diagnostics");
+  $("pingHost").focus();
+}
+
+async function copySelectedNeighbors() {
+  const lines = selectedNeighborDevices().map((device) => [
+    device.ip,
+    device.mac || "-",
+    deviceIdentity(device) || "-",
+    formatNeighborPort(device),
+  ].join("\t"));
+  if (!lines.length) return;
+  try {
+    await navigator.clipboard.writeText(lines.join("\n"));
+    $("neighborSelectedCount").textContent = `${lines.length} copied`;
+  } catch (error) {
+    $("scanError").textContent = "Не удалось скопировать в буфер обмена.";
+  }
+}
+
 async function runScan() {
   if (state.scanning) return;
 
@@ -365,23 +533,26 @@ function exportJson() {
 
 function exportCsv() {
   if (!state.lastResult) return;
-  const rows = [["ip", "device_name", "name_source", "hostname", "mac", "open_ports", "latency_ms", "last_seen"]];
+  const rows = [["mac", "ip", "identity", "hostname", "version", "board", "uptime", "board_port", "open_ports", "latency_ms", "last_seen"]];
   for (const device of getFilteredScanDevices()) {
     rows.push([
-      device.ip,
-      device.device_name || "",
-      device.name_source || "",
-      device.hostname || "",
       device.mac || "",
-      device.open_ports.join(" "),
+      device.ip || "",
+      device.device_name || "",
+      device.hostname || "",
+      device.version || "",
+      device.board || "",
+      device.uptime || "",
+      device.board_port || "",
+      (device.open_ports || []).join(" "),
       device.latency_ms ?? "",
-      device.last_seen,
+      device.last_seen || "",
     ]);
   }
   const csv = rows
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
     .join("\n");
-  download("network-scan.csv", csv, "text/csv;charset=utf-8");
+  download("network-neighbors.csv", csv, "text/csv;charset=utf-8");
 }
 
 function renderInventory() {
@@ -685,14 +856,55 @@ document.querySelectorAll("nav a[data-view]").forEach((link) => {
   });
 });
 $("devices").addEventListener("click", (event) => {
-  const button = event.target.closest(".save-name-btn");
-  if (button) saveDeviceName(button);
+  const row = event.target.closest("tr[data-ip]");
+  if (!row) return;
+
+  if (event.target.matches('input[type="checkbox"]')) {
+    if (event.target.checked) {
+      state.selectedNeighborIps.add(row.dataset.ip);
+    } else {
+      state.selectedNeighborIps.delete(row.dataset.ip);
+    }
+    updateNeighborSelectionUi();
+    return;
+  }
+
+  state.selectedNeighborIps.add(row.dataset.ip);
+  renderNeighborInspector(findDeviceByIp(row.dataset.ip));
 });
 $("devices").addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" || !event.target.classList.contains("device-name-input")) return;
-  const input = event.target;
-  const button = document.querySelector(`.save-name-btn[data-ip="${CSS.escape(input.dataset.ip)}"]`);
-  if (button) saveDeviceName(button);
+  if (event.key !== "Enter") return;
+  const row = event.target.closest("tr[data-ip]");
+  if (row) renderNeighborInspector(findDeviceByIp(row.dataset.ip));
+});
+document.querySelectorAll(".sort-header").forEach((button) => {
+  button.addEventListener("click", () => {
+    const key = button.dataset.sort;
+    state.scanSort = {
+      key,
+      dir: state.scanSort.key === key && state.scanSort.dir === "asc" ? "desc" : "asc",
+    };
+    if (state.lastResult) renderResult(state.lastResult);
+  });
+});
+$("neighborSelectAll").addEventListener("change", (event) => {
+  for (const device of getFilteredScanDevices()) {
+    if (event.target.checked) {
+      state.selectedNeighborIps.add(device.ip);
+    } else {
+      state.selectedNeighborIps.delete(device.ip);
+    }
+  }
+  updateNeighborSelectionUi();
+});
+$("neighborInspectBtn").addEventListener("click", () => openSelectedNeighborInspector(false));
+$("neighborNameBtn").addEventListener("click", () => openSelectedNeighborInspector(true));
+$("neighborPingBtn").addEventListener("click", pingSelectedNeighbor);
+$("neighborCopyBtn").addEventListener("click", copySelectedNeighbors);
+$("neighborSaveIdentityBtn").addEventListener("click", saveNeighborIdentity);
+$("neighborCloseInspectorBtn").addEventListener("click", () => renderNeighborInspector(null));
+$("neighborIdentityInput").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") saveNeighborIdentity();
 });
 $("pingBtn").addEventListener("click", () => runTool("pingOutput", "ping", {
   host: $("pingHost").value,
