@@ -173,6 +173,26 @@ input {
   background: white;
 }
 
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--text);
+  font: inherit;
+  background: white;
+}
+
+select {
+  height: 36px;
+}
+
+textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
 button {
   height: 40px;
   border: 1px solid var(--line);
@@ -235,6 +255,15 @@ button:disabled {
 .subnet-controls {
   grid-template-columns: minmax(260px, 1fr) 160px;
   margin-bottom: 14px;
+}
+
+.inventory-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 140px 90px;
+  gap: 14px;
+  padding: 16px;
+  align-items: end;
+  margin-bottom: 16px;
 }
 
 .output {
@@ -333,6 +362,11 @@ button:disabled {
   gap: 8px;
 }
 
+.muted-count {
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .table-wrap {
   overflow: auto;
   background: white;
@@ -344,6 +378,10 @@ table {
   width: 100%;
   border-collapse: collapse;
   min-width: 1180px;
+}
+
+.inventory-table {
+  min-width: 1120px;
 }
 
 th,
@@ -407,6 +445,33 @@ td {
   color: var(--muted);
 }
 
+.inventory-field {
+  height: 34px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.strong-field {
+  font-weight: 700;
+}
+
+.notes-field {
+  height: auto;
+  min-width: 180px;
+}
+
+.inventory-table small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.save-inventory-btn {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
 .empty {
   color: var(--muted);
   text-align: center;
@@ -439,7 +504,8 @@ td {
   .controls,
   .status-grid,
   .tool-grid,
-  .subnet-controls {
+  .subnet-controls,
+  .inventory-toolbar {
     grid-template-columns: 1fr;
   }
 

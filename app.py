@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
 NAMES_FILE = ROOT / "device_names.json"
+INVENTORY_FILE = ROOT / "inventory.json"
 MAX_HOSTS = 1024
 DEFAULT_PORTS = [22, 80, 135, 139, 443, 445, 515, 631, 3389, 5000, 5985, 8000, 8080, 9100]
 MAX_TOOL_OUTPUT = 12000
@@ -61,6 +62,99 @@ def save_device_names(names: dict) -> None:
     }
     with NAMES_FILE.open("w", encoding="utf-8") as file:
         json.dump(normalized, file, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def load_inventory() -> dict:
+    if not INVENTORY_FILE.exists():
+        return {"devices": {}}
+    try:
+        with INVENTORY_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return {"devices": {}}
+    return {"devices": dict(data.get("devices", {}))}
+
+
+def save_inventory(inventory: dict) -> None:
+    normalized = {"devices": dict(inventory.get("devices", {}))}
+    with INVENTORY_FILE.open("w", encoding="utf-8") as file:
+        json.dump(normalized, file, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def inventory_key(ip: str, mac: str | None = None) -> str:
+    return f"mac:{mac}" if mac else f"ip:{ip}"
+
+
+def merge_scan_into_inventory(devices: list[Device]) -> None:
+    if not devices:
+        return
+
+    inventory = load_inventory()
+    records = inventory.setdefault("devices", {})
+    now = datetime.now().isoformat(timespec="seconds")
+
+    for device in devices:
+        key = inventory_key(device.ip, device.mac)
+        fallback_key = inventory_key(device.ip)
+        record = records.get(key) or records.get(fallback_key) or {}
+        if fallback_key in records and key != fallback_key:
+            records.pop(fallback_key, None)
+
+        record.update({
+            "key": key,
+            "ip": device.ip,
+            "mac": device.mac,
+            "device_name": device.device_name,
+            "name_source": device.name_source,
+            "hostname": device.hostname,
+            "last_latency_ms": device.latency_ms,
+            "open_ports": device.open_ports,
+            "last_seen": device.last_seen,
+            "updated_at": now,
+        })
+        record.setdefault("first_seen", device.last_seen)
+        record.setdefault("category", "")
+        record.setdefault("owner", "")
+        record.setdefault("location", "")
+        record.setdefault("notes", "")
+        record["seen_count"] = int(record.get("seen_count", 0)) + 1
+        records[key] = record
+
+    save_inventory(inventory)
+
+
+def inventory_list() -> list[dict]:
+    records = load_inventory().get("devices", {})
+    return sorted(records.values(), key=lambda item: (item.get("device_name") or item.get("ip") or ""))
+
+
+def update_inventory_item(payload: dict) -> dict:
+    ip = str(payload.get("ip", "")).strip()
+    mac = str(payload.get("mac", "")).strip().upper() or None
+    key = str(payload.get("key", "")).strip() or inventory_key(ip, mac)
+
+    if not ip:
+        raise ValueError("IP-адрес обязателен.")
+    ipaddress.ip_address(ip)
+
+    allowed = {"device_name", "category", "owner", "location", "notes", "status"}
+    inventory = load_inventory()
+    records = inventory.setdefault("devices", {})
+    record = records.get(key) or {"key": key, "ip": ip, "mac": mac, "first_seen": datetime.now().isoformat(timespec="seconds"), "seen_count": 0}
+
+    record["ip"] = ip
+    record["mac"] = mac
+    for field in allowed:
+        if field in payload:
+            value = str(payload.get(field, "")).strip()
+            if len(value) > 500:
+                raise ValueError(f"Поле {field} слишком длинное.")
+            record[field] = value
+
+    record["updated_at"] = datetime.now().isoformat(timespec="seconds")
+    records[key] = record
+    save_inventory(inventory)
+    return record
 
 
 def choose_device_name(ip: str, mac: str | None, hostname: str | None, netbios_name: str | None, names: dict) -> tuple[str | None, str | None]:
@@ -284,6 +378,7 @@ async def scan_network(cidr: str, ports: list[int], timeout_ms: int, concurrency
     started = time.perf_counter()
     results = await asyncio.gather(*(scan_one(ip, ports, timeout_ms, semaphore, names) for ip in hosts))
     devices = sorted((device for device in results if device), key=lambda item: ipaddress.ip_address(item.ip))
+    merge_scan_into_inventory(devices)
 
     return {
         "cidr": str(network),
@@ -418,6 +513,9 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/names":
             self.send_json(load_device_names())
             return
+        if parsed.path == "/api/inventory":
+            self.send_json({"devices": inventory_list()})
+            return
         if parsed.path == "/api/tools/system":
             self.send_json(local_system_info())
             return
@@ -433,6 +531,9 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/device-name":
             self.save_device_name()
+            return
+        if parsed.path == "/api/inventory-item":
+            self.save_inventory_item()
             return
         if parsed.path.startswith("/api/tools/"):
             self.run_tool(parsed.path.rsplit("/", 1)[-1])
@@ -485,11 +586,22 @@ class Handler(SimpleHTTPRequestHandler):
                     names.setdefault("by_mac", {}).pop(mac, None)
 
             save_device_names(names)
+            if name:
+                update_inventory_item({"ip": ip, "mac": mac, "device_name": name})
             self.send_json({"ok": True, "names": names})
         except ValueError as exc:
             self.send_json({"error": str(exc)}, status=400)
         except Exception as exc:
             self.send_json({"error": f"Не удалось сохранить название устройства: {exc}"}, status=500)
+
+    def save_inventory_item(self) -> None:
+        try:
+            record = update_inventory_item(read_json_body(self))
+            self.send_json({"ok": True, "device": record})
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, status=400)
+        except Exception as exc:
+            self.send_json({"error": f"Не удалось сохранить карточку: {exc}"}, status=500)
 
     def run_tool(self, tool_name: str) -> None:
         try:

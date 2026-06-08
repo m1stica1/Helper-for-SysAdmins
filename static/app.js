@@ -1,10 +1,12 @@
 const state = {
   lastResult: null,
+  inventory: [],
   scanning: false,
 };
 
 const viewMeta = {
   scanner: ["Сканирование сети", "Инвентаризация активных IP-адресов в офисном LAN."],
+  inventory: ["Инвентарь", "Постоянная база устройств с ответственными, локациями и заметками."],
   diagnostics: ["Диагностика", "Ping, трассировка, DNS и проверка TCP-портов."],
   subnet: ["Подсети", "Расчет адресного пространства и маски сети."],
   system: ["Система", "Локальные адреса и ARP-таблица."],
@@ -40,6 +42,9 @@ function showView(view) {
 
   if (view === "system" && !$("systemOutput").textContent.trim()) {
     loadSystem();
+  }
+  if (view === "inventory") {
+    loadInventory();
   }
 }
 
@@ -189,6 +194,7 @@ async function runScan() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Не удалось выполнить сканирование.");
     renderResult(data);
+    loadInventory();
   } catch (error) {
     $("scanTitle").textContent = "Ошибка";
     $("scanMeta").textContent = "Сканирование не выполнено.";
@@ -232,6 +238,111 @@ function exportCsv() {
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
     .join("\n");
   download("network-scan.csv", csv, "text/csv;charset=utf-8");
+}
+
+function renderInventory() {
+  const query = $("inventorySearch").value.trim().toLowerCase();
+  const devices = state.inventory.filter((device) => {
+    const haystack = [
+      device.ip,
+      device.mac,
+      device.device_name,
+      device.hostname,
+      device.category,
+      device.owner,
+      device.location,
+      device.status,
+      device.notes,
+    ].join(" ").toLowerCase();
+    return !query || haystack.includes(query);
+  });
+
+  $("inventoryCount").textContent = `${devices.length} устройств`;
+  const body = $("inventoryRows");
+  if (!devices.length) {
+    body.innerHTML = '<tr><td colspan="8" class="empty">Устройства не найдены</td></tr>';
+    return;
+  }
+
+  body.innerHTML = devices.map((device) => `
+    <tr data-key="${escapeHtml(device.key || "")}">
+      <td>
+        <input class="inventory-field strong-field" data-field="device_name" value="${escapeHtml(device.device_name || "")}" placeholder="Название" />
+        <small>${escapeHtml(device.hostname || "hostname не определен")}</small>
+      </td>
+      <td>
+        <strong>${escapeHtml(device.ip || "-")}</strong>
+        <small>${escapeHtml(device.mac || "MAC не определен")}</small>
+      </td>
+      <td><input class="inventory-field" data-field="category" value="${escapeHtml(device.category || "")}" placeholder="ПК, принтер..." /></td>
+      <td><input class="inventory-field" data-field="owner" value="${escapeHtml(device.owner || "")}" placeholder="Ответственный" /></td>
+      <td><input class="inventory-field" data-field="location" value="${escapeHtml(device.location || "")}" placeholder="Кабинет" /></td>
+      <td>
+        <select class="inventory-field" data-field="status">
+          ${["", "active", "reserved", "maintenance", "retired"].map((status) => `
+            <option value="${status}" ${device.status === status ? "selected" : ""}>${status || "не задан"}</option>
+          `).join("")}
+        </select>
+      </td>
+      <td><textarea class="inventory-field notes-field" data-field="notes" placeholder="Заметки">${escapeHtml(device.notes || "")}</textarea></td>
+      <td>
+        <button class="save-inventory-btn primary" type="button">Сохранить</button>
+        <small>Первый раз: ${escapeHtml(formatDate(device.first_seen))}</small>
+        <small>Последний раз: ${escapeHtml(formatDate(device.last_seen))}</small>
+        <small>Обнаружений: ${escapeHtml(device.seen_count || 0)}</small>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function loadInventory() {
+  try {
+    const response = await fetch("/api/inventory");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Не удалось загрузить инвентарь.");
+    state.inventory = data.devices || [];
+    renderInventory();
+  } catch (error) {
+    $("inventoryRows").innerHTML = `<tr><td colspan="8" class="empty">${escapeHtml(error.message)}</td></tr>`;
+  }
+}
+
+async function saveInventoryRow(button) {
+  const row = button.closest("tr");
+  const key = row.dataset.key;
+  const device = state.inventory.find((item) => item.key === key);
+  if (!device) return;
+
+  const payload = {
+    key,
+    ip: device.ip,
+    mac: device.mac,
+  };
+  row.querySelectorAll(".inventory-field").forEach((field) => {
+    payload[field.dataset.field] = field.value;
+  });
+
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/inventory-item", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Не удалось сохранить карточку.");
+    const index = state.inventory.findIndex((item) => item.key === key);
+    if (index >= 0) state.inventory[index] = data.device;
+    renderInventory();
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function exportInventory() {
+  download("inventory.json", JSON.stringify({ devices: state.inventory }, null, 2), "application/json");
 }
 
 async function loadDefaults() {
@@ -279,6 +390,13 @@ $("scanBtn").addEventListener("click", runScan);
 $("refreshBtn").addEventListener("click", runScan);
 $("csvBtn").addEventListener("click", exportCsv);
 $("jsonBtn").addEventListener("click", exportJson);
+$("inventoryRefreshBtn").addEventListener("click", loadInventory);
+$("inventoryExportBtn").addEventListener("click", exportInventory);
+$("inventorySearch").addEventListener("input", renderInventory);
+$("inventoryRows").addEventListener("click", (event) => {
+  const button = event.target.closest(".save-inventory-btn");
+  if (button) saveInventoryRow(button);
+});
 document.querySelectorAll("nav a[data-view]").forEach((link) => {
   link.addEventListener("click", (event) => {
     event.preventDefault();

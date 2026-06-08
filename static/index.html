@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Сканер сети</title>
+    <title>Helper for SysAdmins</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -14,6 +14,7 @@
       </div>
       <nav>
         <a class="active" href="#" data-view="scanner">Сканер</a>
+        <a href="#" data-view="inventory">Инвентарь</a>
         <a href="#" data-view="diagnostics">Диагностика</a>
         <a href="#" data-view="subnet">Подсети</a>
         <a href="#" data-view="system">Система</a>
@@ -112,6 +113,44 @@
           </table>
         </div>
       </section>
+      </section>
+
+      <section class="view" id="inventoryView">
+        <section class="panel inventory-toolbar">
+          <label>
+            Поиск
+            <input id="inventorySearch" placeholder="IP, название, владелец, локация" />
+          </label>
+          <button id="inventoryRefreshBtn" class="primary" type="button">Обновить</button>
+          <button id="inventoryExportBtn" type="button">JSON</button>
+        </section>
+        <section class="results">
+          <div class="results-head">
+            <h2>Карточки устройств</h2>
+            <span id="inventoryCount" class="muted-count">0 устройств</span>
+          </div>
+          <div class="table-wrap">
+            <table class="inventory-table">
+              <thead>
+                <tr>
+                  <th>Устройство</th>
+                  <th>Адреса</th>
+                  <th>Тип</th>
+                  <th>Владелец</th>
+                  <th>Локация</th>
+                  <th>Статус</th>
+                  <th>Заметки</th>
+                  <th>Учет</th>
+                </tr>
+              </thead>
+              <tbody id="inventoryRows">
+                <tr>
+                  <td colspan="8" class="empty">Инвентарь заполнится после первого сканирования</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
       <section class="view" id="diagnosticsView">
