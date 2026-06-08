@@ -24,6 +24,7 @@ STATIC_DIR = ROOT / "static"
 NAMES_FILE = ROOT / "device_names.json"
 INVENTORY_FILE = ROOT / "inventory.json"
 HISTORY_FILE = ROOT / "scan_history.json"
+PROFILES_FILE = ROOT / "scan_profiles.json"
 MAX_HOSTS = 1024
 MAX_HISTORY_ITEMS = 50
 DEFAULT_PORTS = [22, 80, 135, 139, 443, 445, 515, 631, 3389, 5000, 5985, 8000, 8080, 9100]
@@ -122,6 +123,102 @@ def append_scan_history(result: dict) -> None:
 
 def clear_history() -> None:
     save_history({"scans": []})
+
+
+def default_profiles() -> list[dict]:
+    return [
+        {
+            "id": "office-default",
+            "name": "Офисная сеть",
+            "cidr": guess_local_cidr(),
+            "ports": DEFAULT_PORTS,
+            "timeoutMs": 700,
+            "concurrency": 96,
+            "updatedAt": datetime.now().isoformat(timespec="seconds"),
+        },
+        {
+            "id": "printers",
+            "name": "Принтеры",
+            "cidr": guess_local_cidr(),
+            "ports": [80, 443, 515, 631, 9100],
+            "timeoutMs": 900,
+            "concurrency": 64,
+            "updatedAt": datetime.now().isoformat(timespec="seconds"),
+        },
+        {
+            "id": "windows-admin",
+            "name": "Windows/RDP/SMB",
+            "cidr": guess_local_cidr(),
+            "ports": [135, 139, 445, 3389, 5985],
+            "timeoutMs": 900,
+            "concurrency": 96,
+            "updatedAt": datetime.now().isoformat(timespec="seconds"),
+        },
+    ]
+
+
+def load_profiles() -> dict:
+    if not PROFILES_FILE.exists():
+        profiles = default_profiles()
+        save_profiles({"profiles": profiles})
+        return {"profiles": profiles}
+    try:
+        with PROFILES_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return {"profiles": default_profiles()}
+    return {"profiles": list(data.get("profiles", []))}
+
+
+def save_profiles(data: dict) -> None:
+    profiles = list(data.get("profiles", []))
+    with PROFILES_FILE.open("w", encoding="utf-8") as file:
+        json.dump({"profiles": profiles}, file, ensure_ascii=False, indent=2)
+
+
+def slugify(value: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9А-Яа-яёЁ_-]+", "-", value.strip()).strip("-").lower()
+    return slug or f"profile-{int(time.time())}"
+
+
+def upsert_profile(payload: dict) -> dict:
+    name = str(payload.get("name", "")).strip()
+    cidr = str(payload.get("cidr", "")).strip()
+    ports = parse_ports(payload.get("ports"))
+    timeout_ms = int(payload.get("timeoutMs", 700))
+    concurrency = int(payload.get("concurrency", 96))
+
+    if not name:
+        raise ValueError("Название профиля обязательно.")
+    validate_network(cidr, allow_public=False)
+    if not 100 <= timeout_ms <= 5000:
+        raise ValueError("Таймаут должен быть от 100 до 5000 мс.")
+
+    profile_id = str(payload.get("id", "")).strip() or slugify(name)
+    profile = {
+        "id": profile_id,
+        "name": name,
+        "cidr": cidr,
+        "ports": ports,
+        "timeoutMs": timeout_ms,
+        "concurrency": max(1, min(concurrency, 256)),
+        "updatedAt": datetime.now().isoformat(timespec="seconds"),
+    }
+
+    data = load_profiles()
+    profiles = [item for item in data.get("profiles", []) if item.get("id") != profile_id]
+    profiles.append(profile)
+    data["profiles"] = sorted(profiles, key=lambda item: item.get("name", ""))
+    save_profiles(data)
+    return profile
+
+
+def delete_profile(profile_id: str) -> dict:
+    data = load_profiles()
+    profiles = [item for item in data.get("profiles", []) if item.get("id") != profile_id]
+    data["profiles"] = profiles
+    save_profiles(data)
+    return data
 
 
 def inventory_key(ip: str, mac: str | None = None) -> str:
@@ -563,6 +660,9 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/history":
             self.send_json(load_history())
             return
+        if parsed.path == "/api/profiles":
+            self.send_json(load_profiles())
+            return
         if parsed.path == "/api/tools/system":
             self.send_json(local_system_info())
             return
@@ -585,6 +685,13 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/history-clear":
             clear_history()
             self.send_json({"ok": True, "scans": []})
+            return
+        if parsed.path == "/api/profile":
+            self.save_profile()
+            return
+        if parsed.path == "/api/profile-delete":
+            payload = read_json_body(self)
+            self.send_json(delete_profile(str(payload.get("id", "")).strip()))
             return
         if parsed.path.startswith("/api/tools/"):
             self.run_tool(parsed.path.rsplit("/", 1)[-1])
@@ -653,6 +760,15 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({"error": str(exc)}, status=400)
         except Exception as exc:
             self.send_json({"error": f"Не удалось сохранить карточку: {exc}"}, status=500)
+
+    def save_profile(self) -> None:
+        try:
+            profile = upsert_profile(read_json_body(self))
+            self.send_json({"ok": True, "profile": profile, "profiles": load_profiles().get("profiles", [])})
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, status=400)
+        except Exception as exc:
+            self.send_json({"error": f"Не удалось сохранить профиль: {exc}"}, status=500)
 
     def run_tool(self, tool_name: str) -> None:
         try:

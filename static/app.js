@@ -2,6 +2,7 @@ const state = {
   lastResult: null,
   inventory: [],
   history: [],
+  profiles: [],
   scanning: false,
 };
 
@@ -80,6 +81,17 @@ function setOutput(id, value) {
 
 async function postTool(tool, payload) {
   const response = await fetch(`/api/tools/${tool}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Ошибка выполнения.");
+  return data;
+}
+
+async function postJson(url, payload) {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -191,6 +203,84 @@ function renderResult(result) {
       `;
     })
     .join("");
+}
+
+function renderProfiles() {
+  const select = $("profileSelect");
+  if (!state.profiles.length) {
+    select.innerHTML = '<option value="">Нет профилей</option>';
+    return;
+  }
+
+  select.innerHTML = state.profiles.map((profile) => `
+    <option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>
+  `).join("");
+
+  if (!$("profileName").value && state.profiles[0]) {
+    applyProfile(state.profiles[0].id);
+  }
+}
+
+function selectedProfile() {
+  return state.profiles.find((profile) => profile.id === $("profileSelect").value);
+}
+
+function applyProfile(profileId = $("profileSelect").value) {
+  const profile = state.profiles.find((item) => item.id === profileId);
+  if (!profile) return;
+  $("profileSelect").value = profile.id;
+  $("profileName").value = profile.name || "";
+  $("cidr").value = profile.cidr || "";
+  $("ports").value = (profile.ports || []).join(", ");
+  $("timeout").value = profile.timeoutMs || 700;
+  $("concurrency").value = profile.concurrency || 96;
+}
+
+async function loadProfiles() {
+  try {
+    const response = await fetch("/api/profiles");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Не удалось загрузить профили.");
+    state.profiles = data.profiles || [];
+    renderProfiles();
+  } catch (error) {
+    $("scanError").textContent = error.message;
+  }
+}
+
+async function saveCurrentProfile() {
+  try {
+    const current = selectedProfile();
+    const data = await postJson("/api/profile", {
+      id: current?.id || "",
+      name: $("profileName").value.trim(),
+      cidr: $("cidr").value.trim(),
+      ports: $("ports").value.trim(),
+      timeoutMs: Number($("timeout").value),
+      concurrency: Number($("concurrency").value),
+    });
+    state.profiles = data.profiles || [];
+    renderProfiles();
+    $("profileSelect").value = data.profile.id;
+    $("scanError").textContent = "";
+  } catch (error) {
+    $("scanError").textContent = error.message;
+  }
+}
+
+async function deleteCurrentProfile() {
+  const current = selectedProfile();
+  if (!current) return;
+  if (!confirm(`Удалить профиль "${current.name}"?`)) return;
+
+  try {
+    const data = await postJson("/api/profile-delete", { id: current.id });
+    state.profiles = data.profiles || [];
+    $("profileName").value = "";
+    renderProfiles();
+  } catch (error) {
+    $("scanError").textContent = error.message;
+  }
 }
 
 async function saveDeviceName(button) {
@@ -559,6 +649,10 @@ $("scanBtn").addEventListener("click", runScan);
 $("refreshBtn").addEventListener("click", runScan);
 $("csvBtn").addEventListener("click", exportCsv);
 $("jsonBtn").addEventListener("click", exportJson);
+$("profileSelect").addEventListener("change", () => applyProfile());
+$("applyProfileBtn").addEventListener("click", () => applyProfile());
+$("saveProfileBtn").addEventListener("click", saveCurrentProfile);
+$("deleteProfileBtn").addEventListener("click", deleteCurrentProfile);
 $("scanFilterText").addEventListener("input", () => state.lastResult && renderResult(state.lastResult));
 $("scanFilterPort").addEventListener("input", () => state.lastResult && renderResult(state.lastResult));
 $("scanFilterMode").addEventListener("change", () => state.lastResult && renderResult(state.lastResult));
@@ -624,3 +718,4 @@ initTheme();
 updateClock();
 setInterval(updateClock, 1000);
 loadDefaults();
+loadProfiles();
