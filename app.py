@@ -23,7 +23,9 @@ ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
 NAMES_FILE = ROOT / "device_names.json"
 INVENTORY_FILE = ROOT / "inventory.json"
+HISTORY_FILE = ROOT / "scan_history.json"
 MAX_HOSTS = 1024
+MAX_HISTORY_ITEMS = 50
 DEFAULT_PORTS = [22, 80, 135, 139, 443, 445, 515, 631, 3389, 5000, 5985, 8000, 8080, 9100]
 MAX_TOOL_OUTPUT = 12000
 
@@ -79,6 +81,47 @@ def save_inventory(inventory: dict) -> None:
     normalized = {"devices": dict(inventory.get("devices", {}))}
     with INVENTORY_FILE.open("w", encoding="utf-8") as file:
         json.dump(normalized, file, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def load_history() -> dict:
+    if not HISTORY_FILE.exists():
+        return {"scans": []}
+    try:
+        with HISTORY_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return {"scans": []}
+    return {"scans": list(data.get("scans", []))}
+
+
+def save_history(history: dict) -> None:
+    scans = list(history.get("scans", []))[:MAX_HISTORY_ITEMS]
+    with HISTORY_FILE.open("w", encoding="utf-8") as file:
+        json.dump({"scans": scans}, file, ensure_ascii=False, indent=2)
+
+
+def append_scan_history(result: dict) -> None:
+    devices = result.get("devices", [])
+    open_port_total = sum(len(device.get("open_ports", [])) for device in devices)
+    entry = {
+        "id": result.get("scannedAt", datetime.now().isoformat(timespec="seconds")),
+        "cidr": result.get("cidr"),
+        "hostCount": result.get("hostCount", 0),
+        "activeCount": result.get("activeCount", 0),
+        "openPortTotal": open_port_total,
+        "durationSeconds": result.get("durationSeconds", 0),
+        "scannedAt": result.get("scannedAt"),
+        "ports": result.get("ports", []),
+        "devices": devices,
+    }
+    history = load_history()
+    scans = [entry, *history.get("scans", [])]
+    history["scans"] = scans[:MAX_HISTORY_ITEMS]
+    save_history(history)
+
+
+def clear_history() -> None:
+    save_history({"scans": []})
 
 
 def inventory_key(ip: str, mac: str | None = None) -> str:
@@ -379,8 +422,7 @@ async def scan_network(cidr: str, ports: list[int], timeout_ms: int, concurrency
     results = await asyncio.gather(*(scan_one(ip, ports, timeout_ms, semaphore, names) for ip in hosts))
     devices = sorted((device for device in results if device), key=lambda item: ipaddress.ip_address(item.ip))
     merge_scan_into_inventory(devices)
-
-    return {
+    result = {
         "cidr": str(network),
         "hostCount": len(hosts),
         "activeCount": len(devices),
@@ -389,6 +431,8 @@ async def scan_network(cidr: str, ports: list[int], timeout_ms: int, concurrency
         "ports": ports,
         "devices": [asdict(device) for device in devices],
     }
+    append_scan_history(result)
+    return result
 
 
 async def check_ports_for_host(host: str, ports: list[int], timeout_ms: int = 900) -> list[dict]:
@@ -516,6 +560,9 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/inventory":
             self.send_json({"devices": inventory_list()})
             return
+        if parsed.path == "/api/history":
+            self.send_json(load_history())
+            return
         if parsed.path == "/api/tools/system":
             self.send_json(local_system_info())
             return
@@ -534,6 +581,10 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/inventory-item":
             self.save_inventory_item()
+            return
+        if parsed.path == "/api/history-clear":
+            clear_history()
+            self.send_json({"ok": True, "scans": []})
             return
         if parsed.path.startswith("/api/tools/"):
             self.run_tool(parsed.path.rsplit("/", 1)[-1])

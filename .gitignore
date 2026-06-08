@@ -1,5 +1,6 @@
 inventory.json
 device_names.json
+scan_history.json
 __pycache__/
 node_modules/
 package-lock.json

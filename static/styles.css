@@ -332,6 +332,22 @@ button:disabled {
   margin-bottom: 18px;
 }
 
+.history-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 120px 90px 100px;
+  gap: 14px;
+  padding: 16px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.history-layout {
+  display: grid;
+  grid-template-columns: minmax(520px, 1.15fr) minmax(360px, 0.85fr);
+  gap: 16px;
+  align-items: start;
+}
+
 .output {
   min-height: 140px;
   max-height: 300px;
@@ -423,6 +439,12 @@ button:disabled {
   margin-bottom: 12px;
 }
 
+.results,
+.history-layout > *,
+.panel {
+  min-width: 0;
+}
+
 .actions {
   display: flex;
   gap: 8px;
@@ -435,6 +457,8 @@ button:disabled {
 
 .table-wrap {
   overflow: auto;
+  max-width: 100%;
+  min-width: 0;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -448,6 +472,10 @@ table {
 
 .inventory-table {
   min-width: 1120px;
+}
+
+.history-table {
+  min-width: 780px;
 }
 
 th,
@@ -533,6 +561,13 @@ td {
   line-height: 1.35;
 }
 
+.history-table small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .save-inventory-btn {
   width: 100%;
   margin-bottom: 8px;
@@ -572,7 +607,9 @@ td {
   .tool-grid,
   .subnet-controls,
   .inventory-toolbar,
-  .filter-bar {
+  .filter-bar,
+  .history-toolbar,
+  .history-layout {
     grid-template-columns: 1fr;
   }
 

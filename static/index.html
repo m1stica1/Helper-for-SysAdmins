@@ -15,6 +15,7 @@
       <nav>
         <a class="active" href="#" data-view="scanner">Сканер</a>
         <a href="#" data-view="inventory">Инвентарь</a>
+        <a href="#" data-view="history">Журнал</a>
         <a href="#" data-view="diagnostics">Диагностика</a>
         <a href="#" data-view="subnet">Подсети</a>
         <a href="#" data-view="system">Система</a>
@@ -202,6 +203,49 @@
               </tbody>
             </table>
           </div>
+        </section>
+      </section>
+
+      <section class="view" id="historyView">
+        <section class="panel history-toolbar">
+          <label>
+            Поиск
+            <input id="historySearch" placeholder="CIDR, дата, IP, hostname, порт" />
+          </label>
+          <button id="historyRefreshBtn" class="primary" type="button">Обновить</button>
+          <button id="historyExportBtn" type="button">JSON</button>
+          <button id="historyClearBtn" type="button">Очистить</button>
+        </section>
+        <section class="history-layout">
+          <div class="results">
+            <div class="results-head">
+              <h2>Запуски сканирования</h2>
+              <span id="historyCount" class="muted-count">0 запусков</span>
+            </div>
+            <div class="table-wrap">
+              <table class="history-table">
+                <thead>
+                  <tr>
+                    <th>Дата</th>
+                    <th>CIDR</th>
+                    <th>Активные</th>
+                    <th>Порты</th>
+                    <th>Длительность</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="historyRows">
+                  <tr>
+                    <td colspan="6" class="empty">Журнал заполнится после первого сканирования</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <section class="panel info-panel">
+            <h2>Детали запуска</h2>
+            <pre id="historyDetails" class="output large"></pre>
+          </section>
         </section>
       </section>
 

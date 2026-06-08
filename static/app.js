@@ -1,12 +1,14 @@
 const state = {
   lastResult: null,
   inventory: [],
+  history: [],
   scanning: false,
 };
 
 const viewMeta = {
   scanner: ["Сканирование сети", "Инвентаризация активных IP-адресов в офисном LAN."],
   inventory: ["Инвентарь", "Постоянная база устройств с ответственными, локациями и заметками."],
+  history: ["Журнал", "История запусков сканирования и сохраненные снимки сети."],
   diagnostics: ["Диагностика", "Ping, трассировка, DNS и проверка TCP-портов."],
   subnet: ["Подсети", "Расчет адресного пространства и маски сети."],
   system: ["Система", "Локальные адреса и ARP-таблица."],
@@ -62,6 +64,9 @@ function showView(view) {
   }
   if (view === "inventory") {
     loadInventory();
+  }
+  if (view === "history") {
+    loadHistory();
   }
 }
 
@@ -242,6 +247,7 @@ async function runScan() {
     if (!response.ok) throw new Error(data.error || "Не удалось выполнить сканирование.");
     renderResult(data);
     loadInventory();
+    loadHistory();
   } catch (error) {
     $("scanTitle").textContent = "Ошибка";
     $("scanMeta").textContent = "Сканирование не выполнено.";
@@ -405,6 +411,93 @@ function exportInventory() {
   download("inventory.json", JSON.stringify({ devices: state.inventory }, null, 2), "application/json");
 }
 
+function getFilteredHistory() {
+  const query = $("historySearch").value.trim().toLowerCase();
+  if (!query) return state.history;
+
+  return state.history.filter((scan) => {
+    const devices = scan.devices || [];
+    const haystack = [
+      scan.cidr,
+      scan.scannedAt,
+      scan.durationSeconds,
+      scan.activeCount,
+      scan.openPortTotal,
+      ...(scan.ports || []),
+      ...devices.flatMap((device) => [
+        device.ip,
+        device.device_name,
+        device.hostname,
+        device.mac,
+        ...(device.open_ports || []),
+      ]),
+    ].join(" ").toLowerCase();
+    return haystack.includes(query);
+  });
+}
+
+function renderHistory() {
+  const scans = getFilteredHistory();
+  $("historyCount").textContent = `${scans.length} запусков`;
+
+  const body = $("historyRows");
+  if (!scans.length) {
+    body.innerHTML = '<tr><td colspan="6" class="empty">Запуски не найдены</td></tr>';
+    $("historyDetails").textContent = "";
+    return;
+  }
+
+  body.innerHTML = scans.map((scan) => `
+    <tr>
+      <td>${escapeHtml(formatDate(scan.scannedAt))}</td>
+      <td><strong>${escapeHtml(scan.cidr || "-")}</strong><small>${escapeHtml((scan.ports || []).join(", "))}</small></td>
+      <td>${escapeHtml(scan.activeCount || 0)} / ${escapeHtml(scan.hostCount || 0)}</td>
+      <td>${escapeHtml(scan.openPortTotal || 0)}</td>
+      <td>${escapeHtml(scan.durationSeconds || 0)} c</td>
+      <td><button class="history-open-btn" type="button" data-id="${escapeHtml(scan.id)}">Открыть</button></td>
+    </tr>
+  `).join("");
+
+  if (!$("historyDetails").textContent.trim()) {
+    showHistoryDetails(scans[0].id);
+  }
+}
+
+function showHistoryDetails(id) {
+  const scan = state.history.find((item) => item.id === id);
+  if (!scan) return;
+  $("historyDetails").textContent = prettyJson(scan);
+}
+
+async function loadHistory() {
+  try {
+    const response = await fetch("/api/history");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Не удалось загрузить журнал.");
+    state.history = data.scans || [];
+    renderHistory();
+  } catch (error) {
+    $("historyRows").innerHTML = `<tr><td colspan="6" class="empty">${escapeHtml(error.message)}</td></tr>`;
+  }
+}
+
+function exportHistory() {
+  download("scan-history.json", JSON.stringify({ scans: getFilteredHistory() }, null, 2), "application/json");
+}
+
+async function clearHistoryFromUi() {
+  if (!confirm("Очистить журнал сканирований? Инвентарь устройств останется без изменений.")) return;
+
+  const response = await fetch("/api/history-clear", { method: "POST" });
+  const data = await response.json();
+  if (!response.ok) {
+    alert(data.error || "Не удалось очистить журнал.");
+    return;
+  }
+  state.history = [];
+  renderHistory();
+}
+
 function resetScanFilters() {
   $("scanFilterText").value = "";
   $("scanFilterPort").value = "";
@@ -481,6 +574,14 @@ $("inventoryResetBtn").addEventListener("click", resetInventoryFilters);
 $("inventoryRows").addEventListener("click", (event) => {
   const button = event.target.closest(".save-inventory-btn");
   if (button) saveInventoryRow(button);
+});
+$("historyRefreshBtn").addEventListener("click", loadHistory);
+$("historyExportBtn").addEventListener("click", exportHistory);
+$("historyClearBtn").addEventListener("click", clearHistoryFromUi);
+$("historySearch").addEventListener("input", renderHistory);
+$("historyRows").addEventListener("click", (event) => {
+  const button = event.target.closest(".history-open-btn");
+  if (button) showHistoryDetails(button.dataset.id);
 });
 document.querySelectorAll("nav a[data-view]").forEach((link) => {
   link.addEventListener("click", (event) => {
