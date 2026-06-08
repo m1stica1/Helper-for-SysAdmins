@@ -116,6 +116,15 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
+function formatPorts(openPorts = []) {
+  return openPorts.length ? openPorts.map((port) => `tcp/${port}`).join(", ") : "-";
+}
+
+function formatNeighborPort(device) {
+  if (device.board_port) return device.board_port;
+  return formatPorts(device.open_ports || []);
+}
+
 function getFilteredScanDevices() {
   const result = state.lastResult;
   if (!result) return [];
@@ -148,7 +157,7 @@ function renderResult(result) {
   state.lastResult = result;
   const allDevices = result.devices || [];
   const devices = getFilteredScanDevices();
-  const openPortCount = allDevices.reduce((sum, item) => sum + item.open_ports.length, 0);
+  const openPortCount = allDevices.reduce((sum, item) => sum + (item.open_ports || []).length, 0);
   const completion = result.hostCount ? Math.round((allDevices.length / result.hostCount) * 100) : 0;
 
   $("activeCount").textContent = allDevices.length;
@@ -169,9 +178,8 @@ function renderResult(result) {
 
   body.innerHTML = devices
     .map((device) => {
-      const ports = device.open_ports.length ? device.open_ports.map((port) => `${port}/tcp`).join(", ") : "-";
-      const latency = device.latency_ms === null ? "-" : `${device.latency_ms} мс`;
-      const nameSource = {
+      const identity = device.device_name || device.hostname || "-";
+      const identitySource = {
         manual_ip: "закреплено за IP",
         manual_mac: "закреплено за MAC",
         netbios: "NetBIOS",
@@ -179,26 +187,19 @@ function renderResult(result) {
       }[device.name_source] || "нет имени";
       return `
         <tr>
-          <td><span class="state">online</span></td>
+          <td class="neighbor-check-cell"><input type="checkbox" aria-label="Выбрать ${escapeHtml(device.ip)}" /></td>
+          <td>${escapeHtml(device.mac || "-")}</td>
           <td><strong>${escapeHtml(device.ip)}</strong></td>
           <td>
-            <div class="name-cell">
-              <input
-                class="device-name-input"
-                data-ip="${escapeHtml(device.ip)}"
-                data-mac="${escapeHtml(device.mac || "")}"
-                value="${escapeHtml(device.device_name || "")}"
-                placeholder="Например: Принтер бухгалтерии"
-              />
-              <button class="save-name-btn" type="button" data-ip="${escapeHtml(device.ip)}" data-mac="${escapeHtml(device.mac || "")}">✓</button>
+            <div class="identity-cell">
+              <strong>${escapeHtml(identity)}</strong>
+              <small>${escapeHtml(identitySource)}</small>
             </div>
-            <small class="name-source">${escapeHtml(nameSource)}</small>
           </td>
-          <td>${escapeHtml(device.hostname || "-")}</td>
-          <td>${escapeHtml(device.mac || "-")}</td>
-          <td>${ports}</td>
-          <td>${latency}</td>
-          <td>${formatDate(device.last_seen)}</td>
+          <td>${escapeHtml(device.version || "-")}</td>
+          <td>${escapeHtml(device.board || "-")}</td>
+          <td class="neighbor-muted">${escapeHtml(device.uptime || "-")}</td>
+          <td><span class="port-list">${escapeHtml(formatNeighborPort(device))}</span></td>
         </tr>
       `;
     })

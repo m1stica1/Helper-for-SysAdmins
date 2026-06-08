@@ -76,14 +76,38 @@ body {
   font-weight: 700;
 }
 
-.brand-icon {
+.brand-logo {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  background: var(--teal);
-  color: #ffffff;
-  border-radius: 6px;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: linear-gradient(145deg, var(--input-bg), var(--panel-strong));
+  border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.brand-logo svg {
+  width: 25px;
+  height: 25px;
+}
+
+.brand-logo rect {
+  fill: var(--teal);
+  stroke: none;
+}
+
+.brand-logo path {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brand-logo circle {
+  fill: var(--amber);
 }
 
 nav {
@@ -92,6 +116,9 @@ nav {
 }
 
 nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   color: var(--text);
   text-decoration: none;
   padding: 12px 14px;
@@ -103,6 +130,29 @@ nav a.active,
 nav a:hover {
   background: var(--teal);
   color: #ffffff;
+}
+
+.nav-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
+.nav-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.nav-icon path,
+.nav-icon rect,
+.nav-icon circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .connection {
@@ -486,6 +536,139 @@ table {
 
 .history-table {
   min-width: 780px;
+}
+
+.winbox-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: var(--panel-strong);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.winbox-strip + .table-wrap {
+  border-radius: 0 0 8px 8px;
+}
+
+.winbox-strip label {
+  display: inline;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.winbox-strip select {
+  width: auto;
+  min-width: 132px;
+  height: 30px;
+  padding: 4px 28px 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.winbox-status-icon {
+  position: relative;
+  width: 18px;
+  height: 15px;
+  border-bottom: 2px solid var(--teal);
+  border-left: 2px solid var(--teal);
+}
+
+.winbox-status-icon::before,
+.winbox-status-icon::after {
+  content: "";
+  position: absolute;
+  border: 2px solid var(--line);
+  border-radius: 2px;
+  background: var(--input-bg);
+}
+
+.winbox-status-icon::before {
+  width: 7px;
+  height: 5px;
+  left: 0;
+  bottom: 7px;
+}
+
+.winbox-status-icon::after {
+  width: 9px;
+  height: 6px;
+  right: 0;
+  bottom: 2px;
+}
+
+.neighbors-table {
+  min-width: 920px;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.neighbors-table th,
+.neighbors-table td {
+  padding: 7px 8px;
+  font-size: 13px;
+  line-height: 1.25;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.neighbors-table th {
+  color: var(--code-text);
+  background: color-mix(in srgb, var(--panel-strong) 88%, #000000);
+  border-right: 1px solid var(--line);
+}
+
+.neighbors-table td {
+  border-right: 1px solid rgba(142, 164, 186, 0.14);
+}
+
+.neighbors-table tbody tr:hover td {
+  background: var(--teal-soft);
+}
+
+.neighbors-table .check-col,
+.neighbors-table .neighbor-check-cell {
+  width: 28px;
+  padding-left: 4px;
+  padding-right: 4px;
+  text-align: center;
+}
+
+.neighbors-table input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--teal);
+  vertical-align: middle;
+}
+
+.identity-cell {
+  display: inline-grid;
+  gap: 2px;
+}
+
+.identity-cell strong {
+  font-weight: 650;
+}
+
+.identity-cell small,
+.neighbor-muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.port-list {
+  color: var(--code-text);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
 }
 
 th,
