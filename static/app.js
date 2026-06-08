@@ -15,6 +15,23 @@ const viewMeta = {
 
 const $ = (id) => document.getElementById(id);
 
+function applyTheme(theme) {
+  const nextTheme = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = nextTheme;
+  localStorage.setItem("helper-theme", nextTheme);
+  $("themeToggleText").textContent = nextTheme === "dark" ? "Темная" : "Светлая";
+  $("themeToggle").setAttribute("aria-pressed", String(nextTheme === "dark"));
+}
+
+function initTheme() {
+  applyTheme(localStorage.getItem("helper-theme") || "dark");
+}
+
+function toggleTheme() {
+  const current = document.documentElement.dataset.theme || "dark";
+  applyTheme(current === "dark" ? "light" : "dark");
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -432,7 +449,9 @@ $("subnetBtn").addEventListener("click", () => runTool("subnetOutput", "subnet",
 }));
 $("systemBtn").addEventListener("click", loadSystem);
 $("arpBtn").addEventListener("click", loadArp);
+$("themeToggle").addEventListener("click", toggleTheme);
 
+initTheme();
 updateClock();
 setInterval(updateClock, 1000);
 loadDefaults();

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -35,7 +35,13 @@
           <h1 id="pageTitle">Сканирование сети</h1>
           <p id="pageSubtitle">Инвентаризация активных IP-адресов в офисном LAN.</p>
         </div>
-        <time id="clock"></time>
+        <div class="topbar-actions">
+          <button id="themeToggle" class="theme-toggle" type="button" aria-label="Переключить тему">
+            <span class="theme-toggle-icon" aria-hidden="true">◐</span>
+            <span id="themeToggleText">Темная</span>
+          </button>
+          <time id="clock"></time>
+        </div>
       </header>
 
       <section class="view active" id="scannerView">
