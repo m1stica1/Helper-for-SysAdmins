@@ -316,11 +316,20 @@ button:disabled {
 
 .inventory-toolbar {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 140px 90px;
+  grid-template-columns: minmax(220px, 1.4fr) 130px repeat(3, minmax(120px, 1fr)) 120px 100px 90px;
   gap: 14px;
   padding: 16px;
   align-items: end;
   margin-bottom: 16px;
+}
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 120px 210px 110px;
+  gap: 14px;
+  padding: 16px;
+  align-items: end;
+  margin-bottom: 18px;
 }
 
 .output {
@@ -562,7 +571,8 @@ td {
   .status-grid,
   .tool-grid,
   .subnet-controls,
-  .inventory-toolbar {
+  .inventory-toolbar,
+  .filter-bar {
     grid-template-columns: 1fr;
   }
 

@@ -88,9 +88,31 @@
         </div>
       </section>
 
+      <section class="panel filter-bar">
+        <label>
+          Фильтр результатов
+          <input id="scanFilterText" placeholder="IP, hostname, MAC, название" />
+        </label>
+        <label>
+          Порт
+          <input id="scanFilterPort" type="number" min="1" max="65535" placeholder="443" />
+        </label>
+        <label>
+          Состояние
+          <select id="scanFilterMode">
+            <option value="all">Все устройства</option>
+            <option value="withPorts">Только с открытыми портами</option>
+            <option value="named">Только с названием</option>
+            <option value="unnamed">Без названия</option>
+          </select>
+        </label>
+        <button id="scanFilterResetBtn" type="button">Сбросить</button>
+      </section>
+
       <section class="results">
         <div class="results-head">
           <h2>Результаты</h2>
+          <span id="scanFilterCount" class="muted-count">0 устройств</span>
           <div class="actions">
             <button id="refreshBtn" type="button">↻ Обновить</button>
             <button id="csvBtn" type="button">CSV</button>
@@ -127,7 +149,31 @@
             Поиск
             <input id="inventorySearch" placeholder="IP, название, владелец, локация" />
           </label>
+          <label>
+            Статус
+            <select id="inventoryStatusFilter">
+              <option value="">Все</option>
+              <option value="active">active</option>
+              <option value="reserved">reserved</option>
+              <option value="maintenance">maintenance</option>
+              <option value="retired">retired</option>
+              <option value="empty">не задан</option>
+            </select>
+          </label>
+          <label>
+            Тип
+            <input id="inventoryCategoryFilter" placeholder="ПК, принтер" />
+          </label>
+          <label>
+            Владелец
+            <input id="inventoryOwnerFilter" placeholder="IT" />
+          </label>
+          <label>
+            Локация
+            <input id="inventoryLocationFilter" placeholder="Кабинет" />
+          </label>
           <button id="inventoryRefreshBtn" class="primary" type="button">Обновить</button>
+          <button id="inventoryResetBtn" type="button">Сбросить</button>
           <button id="inventoryExportBtn" type="button">JSON</button>
         </section>
         <section class="results">

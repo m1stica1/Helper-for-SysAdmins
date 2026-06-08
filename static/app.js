@@ -99,18 +99,48 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
+function getFilteredScanDevices() {
+  const result = state.lastResult;
+  if (!result) return [];
+
+  const text = $("scanFilterText").value.trim().toLowerCase();
+  const port = Number($("scanFilterPort").value);
+  const mode = $("scanFilterMode").value;
+
+  return (result.devices || []).filter((device) => {
+    const haystack = [
+      device.ip,
+      device.device_name,
+      device.hostname,
+      device.mac,
+      device.name_source,
+      ...(device.open_ports || []),
+    ].join(" ").toLowerCase();
+    const textMatch = !text || haystack.includes(text);
+    const portMatch = !port || (device.open_ports || []).includes(port);
+    const modeMatch =
+      mode === "all" ||
+      (mode === "withPorts" && (device.open_ports || []).length > 0) ||
+      (mode === "named" && device.device_name) ||
+      (mode === "unnamed" && !device.device_name);
+    return textMatch && portMatch && modeMatch;
+  });
+}
+
 function renderResult(result) {
   state.lastResult = result;
-  const devices = result.devices || [];
-  const openPortCount = devices.reduce((sum, item) => sum + item.open_ports.length, 0);
-  const completion = result.hostCount ? Math.round((devices.length / result.hostCount) * 100) : 0;
+  const allDevices = result.devices || [];
+  const devices = getFilteredScanDevices();
+  const openPortCount = allDevices.reduce((sum, item) => sum + item.open_ports.length, 0);
+  const completion = result.hostCount ? Math.round((allDevices.length / result.hostCount) * 100) : 0;
 
-  $("activeCount").textContent = devices.length;
+  $("activeCount").textContent = allDevices.length;
   $("hostCount").textContent = result.hostCount || 0;
   $("openPortCount").textContent = openPortCount;
   $("duration").textContent = `${result.durationSeconds || 0} c`;
   $("scanTitle").textContent = `Сканирование ${result.cidr}`;
-  $("scanMeta").textContent = `Активных устройств: ${devices.length}. Проверено адресов: ${result.hostCount}.`;
+  $("scanMeta").textContent = `Активных устройств: ${allDevices.length}. Проверено адресов: ${result.hostCount}.`;
+  $("scanFilterCount").textContent = `${devices.length} из ${allDevices.length} устройств`;
   $("scanError").textContent = "";
   $("ring").style.background = `conic-gradient(var(--teal) ${Math.max(completion, 6) * 3.6}deg, var(--line) 0deg)`;
 
@@ -239,7 +269,7 @@ function exportJson() {
 function exportCsv() {
   if (!state.lastResult) return;
   const rows = [["ip", "device_name", "name_source", "hostname", "mac", "open_ports", "latency_ms", "last_seen"]];
-  for (const device of state.lastResult.devices) {
+  for (const device of getFilteredScanDevices()) {
     rows.push([
       device.ip,
       device.device_name || "",
@@ -259,6 +289,11 @@ function exportCsv() {
 
 function renderInventory() {
   const query = $("inventorySearch").value.trim().toLowerCase();
+  const statusFilter = $("inventoryStatusFilter").value;
+  const categoryFilter = $("inventoryCategoryFilter").value.trim().toLowerCase();
+  const ownerFilter = $("inventoryOwnerFilter").value.trim().toLowerCase();
+  const locationFilter = $("inventoryLocationFilter").value.trim().toLowerCase();
+
   const devices = state.inventory.filter((device) => {
     const haystack = [
       device.ip,
@@ -271,7 +306,15 @@ function renderInventory() {
       device.status,
       device.notes,
     ].join(" ").toLowerCase();
-    return !query || haystack.includes(query);
+    const status = (device.status || "").toLowerCase();
+    const statusMatch =
+      !statusFilter ||
+      (statusFilter === "empty" && !status) ||
+      status === statusFilter;
+    const categoryMatch = !categoryFilter || String(device.category || "").toLowerCase().includes(categoryFilter);
+    const ownerMatch = !ownerFilter || String(device.owner || "").toLowerCase().includes(ownerFilter);
+    const locationMatch = !locationFilter || String(device.location || "").toLowerCase().includes(locationFilter);
+    return (!query || haystack.includes(query)) && statusMatch && categoryMatch && ownerMatch && locationMatch;
   });
 
   $("inventoryCount").textContent = `${devices.length} устройств`;
@@ -362,6 +405,22 @@ function exportInventory() {
   download("inventory.json", JSON.stringify({ devices: state.inventory }, null, 2), "application/json");
 }
 
+function resetScanFilters() {
+  $("scanFilterText").value = "";
+  $("scanFilterPort").value = "";
+  $("scanFilterMode").value = "all";
+  if (state.lastResult) renderResult(state.lastResult);
+}
+
+function resetInventoryFilters() {
+  $("inventorySearch").value = "";
+  $("inventoryStatusFilter").value = "";
+  $("inventoryCategoryFilter").value = "";
+  $("inventoryOwnerFilter").value = "";
+  $("inventoryLocationFilter").value = "";
+  renderInventory();
+}
+
 async function loadDefaults() {
   const response = await fetch("/api/defaults");
   const data = await response.json();
@@ -407,9 +466,18 @@ $("scanBtn").addEventListener("click", runScan);
 $("refreshBtn").addEventListener("click", runScan);
 $("csvBtn").addEventListener("click", exportCsv);
 $("jsonBtn").addEventListener("click", exportJson);
+$("scanFilterText").addEventListener("input", () => state.lastResult && renderResult(state.lastResult));
+$("scanFilterPort").addEventListener("input", () => state.lastResult && renderResult(state.lastResult));
+$("scanFilterMode").addEventListener("change", () => state.lastResult && renderResult(state.lastResult));
+$("scanFilterResetBtn").addEventListener("click", resetScanFilters);
 $("inventoryRefreshBtn").addEventListener("click", loadInventory);
 $("inventoryExportBtn").addEventListener("click", exportInventory);
 $("inventorySearch").addEventListener("input", renderInventory);
+$("inventoryStatusFilter").addEventListener("change", renderInventory);
+$("inventoryCategoryFilter").addEventListener("input", renderInventory);
+$("inventoryOwnerFilter").addEventListener("input", renderInventory);
+$("inventoryLocationFilter").addEventListener("input", renderInventory);
+$("inventoryResetBtn").addEventListener("click", resetInventoryFilters);
 $("inventoryRows").addEventListener("click", (event) => {
   const button = event.target.closest(".save-inventory-btn");
   if (button) saveInventoryRow(button);
